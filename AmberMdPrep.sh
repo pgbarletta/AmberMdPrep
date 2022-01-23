@@ -1,5 +1,23 @@
 #!/bin/bash
 
+########################
+# Modificaciones que le hice: (puede q me haya olvidado de alguna:
+
+# mcbarint = 100, p/ los pasos q regulan presión. Esto ya es el default.
+# Simplemente me gusta que lo tenga.
+
+# Antes: ntmin = 2, maxcyc = 1000
+# Ahora: ntmin = 1, maxcyc = 1000, ncyc = 200. Asi hago 200 de SD y 800 de CG
+# en vez de puro SD y tengo una mejor minimización.
+
+# En el paso final de equi de densidad:
+# Antes: nstlim = 500000
+# Ahora: nstlim = 2485000 Así, el último restart queda con un tiemp de 5ns.
+# Antes: ntxo = 2
+# Ahora: ntxo = 1. P/ q me escriba el restart en rst7
+
+########################
+
 # AmberMdPrep.sh
 # Wrapper script for preparing explicitly solvated systems for MD with Amber.
 # Daniel R. Roe
@@ -404,7 +422,7 @@ while [ ! -z "$1" ] ; do
     '--finalthermo' ) shift ; FINALTHERMO=$1 ;;
     '--finalbaro'   ) shift ; FINALBARO=$1 ;;
     #'--evaltype'    ) shift ; EVALTYPE=$1 ;;
-    '--skipfinaleq' ) EVALTYPE='' ;;
+    '--skipfinaleq' ) shift ; EVALTYPE='' ;;
     '--mask'        ) shift ; ADDITIONALMASK=$1 ;;
     '--ares'        ) shift ; ADDEDRES="$ADDEDRES $1" ;;
     '--pmask'       ) shift ; PRODUCTIONMASK=$1 ;;
@@ -682,9 +700,9 @@ CreateMinInput() {
   RUN=$1
   MDIN="$RUN".in
   shift
-  NTMIN=2
+  NTMIN=1
   MAXCYC=1000
-  NCYC=10
+  NCYC=200
   NTWX=500
   NTPR=50
   NTWR=500
@@ -703,7 +721,7 @@ EOF
 cat >> $MDIN <<EOF
  &end
 EOF
-  RST="$RUN".ncrst
+  RST="$RUN".rst7
   if [ $OVERWRITE -eq 1 -o ! -f "$RST" ] ; then
     echo "Minimization: $RUN"
     if [ $TEST -eq 0 ] ; then
@@ -779,7 +797,7 @@ MD: $MDIN
  &cntrl
    imin = 0, nstlim = $NSTLIM, dt = $DT, 
    ntx = $NTX, irest = $IREST, ig = -1,
-   ntwx = $NTWX, ntwv = -1, ioutfm = 1, ntxo = 2, ntpr = $NTPR, ntwr = $NTWR, 
+   ntwx = $NTWX, ntwv = -1, ioutfm = 0, ntxo = 1, ntpr = $NTPR, ntwr = $NTWR, 
    iwrap = 0, nscm = $NSCM,
    ntc = 2, ntf = 2, ntb = $NTB, cut = $CUT,  
 EOF
@@ -792,7 +810,7 @@ EOF
 cat >> $MDIN <<EOF
  &end
 EOF
-  RST="$RUN".ncrst
+  RST="$RUN".rst7
   if [ $OVERWRITE -eq 1 -o ! -f "$RST" ] ; then
     echo "MD: $RUN"
     if [ $TEST -eq 0 ] ; then
@@ -841,10 +859,10 @@ NoRestartEq() {
 
 # Final density Equil
 FinalEq() {
-  #if [ -z "$EVALTYPE" ] ; then
-  #  echo "--evaltype not specified; skipping final density equilibration."
-  #  return 0
-  #fi
+  if [ -z "$EVALTYPE" ] ; then
+    echo "--evaltype not specified; skipping final density equilibration."
+    return 0
+  fi
   echo "Starting final density equilibration."
   THERMOTYPE=$FINALTHERMO
   BAROTYPE=$FINALBARO
@@ -875,11 +893,11 @@ FinalEq() {
   fi
   num=1
   DONE=0
-  INPCRD=step9.ncrst
+  INPCRD=step9.rst7
   OUTFILES=''
   while [ $DONE -eq 0 ] ; do
     echo "Final $num"
-    CreateMdInput final.$num ntb 2 dt 0.002 nscm 1000 nstlim 500000 ntwx 5000 ntpr 500 ntwr 50000 cut 9.0 irest $finalIrest
+    CreateMdInput final.$num ntb 2 dt 0.002 nscm 1000 nstlim 2485000 ntwx 5000 ntpr 500 ntwr 50000 cut 9.0 irest $finalIrest
     # Decide if we are done. 0 = done, 2 = error, otherwise need more.
     ERR=2
     if [ $TEST -eq 1 ] ; then
@@ -933,7 +951,7 @@ EOF
       echo "Equlibration eval failed" > $STATUSFILE
       break
     else
-      INPCRD="final.$num.ncrst"
+      INPCRD="final.$num.rst7"
       ((num++))
       # Safety valve
       if [ $num -gt 20 ] ; then
